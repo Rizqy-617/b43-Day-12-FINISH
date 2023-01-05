@@ -36,7 +36,7 @@ func UploadFile(next http.HandlerFunc) http.HandlerFunc {
         tempFile.Write(fileBytes)
 
         data := tempFile.Name()
-        filename := data[7:]
+        filename := data[7:] //upload/
 
         ctx := context.WithValue(r.Context(), "dataFile", filename)
         next.ServeHTTP(w, r.WithContext(ctx))

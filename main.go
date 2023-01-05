@@ -104,7 +104,7 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 	if session.Values["IsLogin"] != true {
 		Data.IsLogin = false
 
-		rows, errQuery := connection.Conn.Query(context.Background(), "SELECT project_name, start_date, end_date, description, technologies, image FROM tb_projects",)
+		rows, errQuery := connection.Conn.Query(context.Background(), "SELECT id, project_name, start_date, end_date, description, technologies, image FROM tb_projects")
 		if errQuery != nil {
 			fmt.Println("Message : " + errQuery.Error())
 			return
@@ -113,7 +113,7 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 		for rows.Next() {
 			var each = dataReceive{}
 
-			err := rows.Scan(&each.Projectname, &each.Startdate, &each.Enddate, &each.Description, &each.Technologies, &each.Image)
+			err := rows.Scan(&each.ID,&each.Projectname, &each.Startdate, &each.Enddate, &each.Description, &each.Technologies, &each.Image)
 			if err != nil {
 				fmt.Println("Message : " + err.Error())
 				return
@@ -163,8 +163,6 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	Data.FlashData = strings.Join(flashes, "")
-
-	
 
 	dataCaller := map[string]interface{} {
 		"Projects": result,
@@ -230,8 +228,7 @@ func countduration(start time.Time, end time.Time) string {
 }
 
 func addProject(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseMultipartForm(10485760) // menggunakan r.ParseMultipartForm karena mengizinkan pengiriman file beda dengan r.ParseForm yang tidak mengizinkan pengiriman gambar
-	// 10485760 itu parameter untuk ukuran batas file nya dalam satuan byte, jadi batas ukuran file yang diterima aku isi 10485760 byte atau 10 mb
+	err := r.ParseForm()
 
 	if err != nil {
 		log.Fatal(err)
@@ -255,7 +252,7 @@ func addProject(w http.ResponseWriter, r *http.Request) {
 	_, insertRow := connection.Conn.Exec(context.Background(), "INSERT INTO tb_projects(project_name, start_date, end_date, description, technologies, image, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7)", projectname, startDate, endDate, description, technologies, image, user)
 	if insertRow != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Message: " + err.Error()))
+		w.Write([]byte("Message: " + insertRow.Error()))
 		return
 	}
 
@@ -272,20 +269,7 @@ func detailProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ID, _ := strconv.Atoi(mux.Vars(r)["id"])
-
-	var resultData = dataReceive{}
-
-	err = connection.Conn.QueryRow(context.Background(), "SELECT * FROM tb_projects WHERE id=$1", ID).Scan(&resultData.ID, &resultData.Projectname, &resultData.Startdate, &resultData.Enddate, &resultData.Description, &resultData.Technologies, &resultData.Image, &resultData.User)
-
-	resultData.Duration = countduration(resultData.Startdate, resultData.Enddate)
-
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Message : " + err.Error()))
-		return
-	}
-
+	
 	var store = sessions.NewCookieStore([]byte("SESSION_ID"))
 	session, _ := store.Get(r, "SESSION_ID")
 
@@ -295,6 +279,21 @@ func detailProject(w http.ResponseWriter, r *http.Request) {
 		Data.IsLogin = session.Values["IsLogin"].(bool)
 		Data.UserName = session.Values["Name"].(string)
 	}
+
+	ID, _ := strconv.Atoi(mux.Vars(r)["id"])
+
+	var resultData = dataReceive{}
+
+	err = connection.Conn.QueryRow(context.Background(), "SELECT * FROM tb_projects WHERE id=$1", ID).Scan(&resultData.ID, &resultData.Projectname, &resultData.Startdate, &resultData.Enddate, &resultData.Description, &resultData.Technologies, &resultData.Image,&resultData.User )
+
+	resultData.Duration = countduration(resultData.Startdate, resultData.Enddate)
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Message : " + err.Error()))
+		return
+	}
+
 
 	detailProject := map[string]interface{} {
 		"Projects": resultData,
@@ -359,7 +358,7 @@ func editProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateProject(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseMultipartForm(10485760)
+	err := r.ParseForm()
 
 	if err != nil {
 		log.Fatal(err)
@@ -379,9 +378,9 @@ func updateProject(w http.ResponseWriter, r *http.Request) {
 
 	var store = sessions.NewCookieStore([]byte("SESSION_ID"))
     session, _ := store.Get(r, "SESSION_ID")
-	author := session.Values["Id"].(int)
+	user := session.Values["Id"].(int)
 
-	_, updateRow := connection.Conn.Exec(context.Background(), "UPDATE tb_projects SET project_name = $1, start_date = $2, end_date = $3, description = $4, technologies = $5, image = $6, user_id = $7 WHERE id = $8", projectname, startDate, endDate, description, technologies, image, author, ID)
+	_, updateRow := connection.Conn.Exec(context.Background(), "UPDATE tb_projects SET project_name = $1, start_date = $2, end_date = $3, description = $4, technologies = $5, image = $6, user_id = $7 WHERE id = $8", projectname, startDate, endDate, description, technologies, image, user, ID)
 	if updateRow != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Message: " + err.Error()))
@@ -429,16 +428,6 @@ func registerPage(w http.ResponseWriter, r *http.Request) {
         return
 	}
 
-	var store = sessions.NewCookieStore([]byte("SESSION_ID"))
-	session, _ := store.Get(r, "SESSION_ID")
-
-	if session.Values["IsLogin"] != true {
-		Data.IsLogin = false
-	} else {
-		Data.IsLogin = session.Values["IsLogin"].(bool)
-		Data.UserName = session.Values["Name"].(string)
-	}
-
 	dataCaller := map[string]interface{} {
 		"Data": Data,
 	}
@@ -465,7 +454,13 @@ func register(w http.ResponseWriter, r *http.Request) {
         w.Write([]byte("message : " + insertRow.Error()))
         return
 	}
-	
+
+	var store = sessions.NewCookieStore([]byte("SESSION_ID"))
+	session, _ := store.Get(r, "SESSION_ID")
+
+	session.AddFlash("Successfully register!", "message")
+
+	session.Save(r, w)
 
 	http.Redirect(w, r, "/login", http.StatusMovedPermanently)
 }
@@ -483,12 +478,16 @@ func loginPage(w http.ResponseWriter, r *http.Request) {
 	var store = sessions.NewCookieStore([]byte("SESSION_ID"))
 	session, _ := store.Get(r, "SESSION_ID")
 
-	if session.Values["IsLogin"] != true {
-		Data.IsLogin = false
-	} else {
-		Data.IsLogin = session.Values["IsLogin"].(bool)
-		Data.UserName = session.Values["Name"].(string)
+	fm := session.Flashes("message")
+
+	var flashes []string
+	if len(fm) > 0 {
+		session.Save(r, w)
+		for _, fl := range fm {
+			flashes = append(flashes, fl.(string))
+		}
 	}
+	Data.FlashData = strings.Join(flashes, "")
 
 	dataCaller := map[string]interface{} {
 		"Data": Data,
